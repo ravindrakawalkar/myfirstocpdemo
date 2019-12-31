@@ -1,27 +1,16 @@
-FROM microsoft/dotnet 
-
-# Set ASPNETCORE_URLS
-ENV ASPNETCORE_URLS=https://*:8080
-
-# Switch to root for changing dir ownership/permissions
-USER 0
-
-# Copy the binaries
-COPY /bin/release/netcoreapp2.2/publish app
-
-# Change to app directory
+FROM mcr.microsoft.com/dotnet/core/sdk:2.2 AS build-env
 WORKDIR /app
 
-# In order to drop the root user, we have to make some directories world
-# writable as OpenShift default security model is to run the container under
-# random UID.
-RUN chown -R 1001:0 /app && chmod -R og+rwx /app
+# Copy csproj and restore as distinct layers
+COPY *.csproj ./
+RUN dotnet restore
 
-# Expose port 8080 for the application.
-EXPOSE 8080
+# Copy everything else and build
+COPY . ./
+RUN dotnet publish -c Release -o out
 
-# Run container by default as user with id 1001 (default)
-USER 1001
-
-# Start the application using dotnet!!!
-ENTRYPOINT dotnet aspnet.on.openshift.dll
+# Build runtime image
+FROM mcr.microsoft.com/dotnet/core/aspnet:2.2
+WORKDIR /app
+COPY --from=build-env /app/out .
+ENTRYPOINT ["dotnet", "aspnetapp.dll"]
